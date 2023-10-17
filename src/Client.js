@@ -82,6 +82,7 @@ class Client extends EventEmitter {
 
         this.pupBrowser = null;
         this.pupPage = null;
+        this.isStartingLogout = false;
 
         Util.setFfmpegPath(this.options.ffmpegPath);
     }
@@ -484,7 +485,8 @@ class Client extends EventEmitter {
 
         await page.exposeFunction('onRemoveMessageEvent', (msg) => {
 
-            if (!msg.isNewMsg) return;
+            if (this.isStartingLogout) return;
+            // if (!msg.isNewMsg) return;
 
             const message = new Message(this, msg);
 
@@ -655,12 +657,16 @@ class Client extends EventEmitter {
             this.emit(Events.MESSAGE_EDIT, new Message(this, msg), newBody, prevBody);
         });
 
+        await page.exposeFunction('onStartingLogout', () => {
+            this.isStartingLogout = true;
+        });
+
         await page.evaluate(() => {
             window.Store.Msg.on('change', (msg) => { window.onChangeMessageEvent(window.WWebJS.getMessageModel(msg)); });
             window.Store.Msg.on('change:type', (msg) => { window.onChangeMessageTypeEvent(window.WWebJS.getMessageModel(msg)); });
             window.Store.Msg.on('change:ack', (msg, ack) => { window.onMessageAckEvent(window.WWebJS.getMessageModel(msg), ack); });
             window.Store.Msg.on('change:isUnsentMedia', (msg, unsent) => { if (msg.id.fromMe && !unsent) window.onMessageMediaUploadedEvent(window.WWebJS.getMessageModel(msg)); });
-            window.Store.Msg.on('remove', (msg) => { if (msg.isNewMsg) window.onRemoveMessageEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.Msg.on('remove', (msg) => { /*if (msg.isNewMsg)*/ window.onRemoveMessageEvent(window.WWebJS.getMessageModel(msg)); });
             window.Store.Msg.on('change:body', (msg, newBody, prevBody) => { window.onEditMessageEvent(window.WWebJS.getMessageModel(msg), newBody, prevBody); });
             window.Store.AppState.on('change:state', (_AppState, state) => { window.onAppStateChangedEvent(state); });
             window.Store.Conn.on('change:battery', (state) => { window.onBatteryStateChangedEvent(state); });
@@ -678,6 +684,9 @@ class Client extends EventEmitter {
                 }
             });
             window.Store.Chat.on('change:unreadCount', (chat) => {window.onChatUnreadCountEvent(chat);});
+            window.Store.Cmd.on('starting_logout', () => {
+                window.onStartingLogout();
+            });
 
             {
                 const module = window.Store.createOrUpdateReactionsModule;
